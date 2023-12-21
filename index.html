@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PVP</title>
+    <script type="text/javascript">
+      window.errors = []
+      if (window.addEventListener) {
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (e.message) {
+              if (e.error && e.error.stack) {
+                if (e.message.indexOf('Uncaught SyntaxError') === 0) {
+                  window.errors.push(
+                    e.message +
+                      ' at ' +
+                      e.filename +
+                      ':' +
+                      e.lineno +
+                      ':' +
+                      e.colno
+                  )
+                } else {
+                  window.errors.push(e.error.stack)
+                }
+                if (window.onNewError) window.onNewError()
+              }
+            } else {
+              window.errors.push(
+                'Problem loading ' + (e.target.src || e.target.href)
+              )
+              if (window.onNewError) window.onNewError()
+            }
+            window.onerror = null
+          },
+          true
+        ) // true so that errors bubble up to window
+        window.addEventListener(
+          'unhandledrejection',
+          function (e) {
+            window.errors.push(
+              e.reason && (e.reason.stack || e.reason.message || e.reason)
+            )
+            if (window.onNewError) window.onNewError()
+          },
+          false
+        )
+      }
+      window.onerror = function (message, source, lineno, colno, error) {
+        if (colno) {
+          lineno += ':' + colno
+        }
+        if (error && error.stack) {
+          window.errors.push(error.stack)
+        } else {
+          window.errors.push(message + ' at ' + source + ':' + lineno)
+        }
+        if (window.onNewError) window.onNewError()
+      }
+    </script>
+     <style>
+html,
+body {
+  height: 100%;
+}
+body,
+::backdrop {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: black;
+  font-size: 0;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  background-position: center;
+  background-size: cover;
+}
+#wrapper {
+  display: block;
+  position: relative;
+}
+.no-cursor #wrapper {
+  cursor: none;
+}
+.loading #wrapper {
+  visibility: hidden;
+}
+.stretch-stage #wrapper {
+  width: 100vw;
+  height: 100vh;
+}
+/* CSS for proportional wrapper scaling is added dynamically by htmlifier.ts */
+#monitors {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+#stage {
+  width: 100%;
+  height: 100%;
+}
+#loading-progress {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  border-radius: 20px;
+  --progress: 0%;
+  z-index: 100;
+}
+.show-loading-progress #loading-progress {
+  display: block;
+}
+#loading-progress::before {
+  content: attr(data-progress);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 1.5rem;
+  margin-bottom: 15px;
+}
+#loading-progress::after {
+  content: '';
+  display: block;
+  height: 16px;
+  border-radius: 20px;
+  width: var(--progress);
+}
+#loading-image {
+  position: fixed;
+  max-width: 100%;
+  max-height: 100%;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+}
+.stretch-loading-image #loading-image {
+  width: 100%;
+  height: 100%;
+}
+.buttons {
+  position: fixed;
+  top: 0;
+  right: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-bottom-left-radius: 12px;
+}
+.buttons .button,
+.buttons button {
+  display: none;
+  -webkit-appearance: none;
+  border: none;
+  background: none;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 24px;
+}
+.buttons button:disabled,
+#add-sprite-file:disabled + #add-sprite-btn {
+  cursor: auto;
+  opacity: 0.5;
+}
+#start-btn {
+  background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"%3E%3Cpath d="M8 5v14l11-7z" fill="%23fff"/%3E%3C/svg%3E%0A');
+}
+.running #start-btn {
+  background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"%3E%3Cpath d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" fill="%23fff"/%3E%3C/svg%3E');
+}
+#stop-btn {
+  background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"%3E%3Cpath d="M6 6h12v12H6z" fill="%23fff"/%3E%3C/svg%3E%0A');
+}
+#fullscreen-btn {
+  background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"%3E%3Cpath d="M14 28h-4v10h10v-4h-6v-6zm-4-8h4v-6h6v-4H10v10zm24 14h-6v4h10V28h-4v6zm-6-24v4h6v6h4V10H28z" fill="%23fff"/%3E%3C/svg%3E');
+}
+.fullscreen #fullscreen-btn {
+  background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"%3E%3Cpath d="M10 32h6v6h4V28H10v4zm6-16h-6v4h10V10h-4v6zm12 22h4v-6h6v-4H28v10zm4-22v-6h-4v10h10v-4h-6z" fill="%23fff"/%3E%3C/svg%3E');
+}
+#download-btn {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M5,20h14v-2H5V20z M19,9h-4V3H9v6H5l7,7L19,9z'/%3E%3C/svg%3E");
+}
+#add-sprite-btn {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z'/%3E%3C/svg%3E");
+}
+#add-sprite-file {
+  display: none;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+.show-start-stop-btns #start-btn,
+.show-start-stop-btns #stop-btn,
+.show-fullscreen-btn #fullscreen-btn,
+.show-download-btn #download-btn,
+.show-add-sprite-btn #add-sprite-btn,
+.show-add-sprite-btn #add-sprite-file {
+  display: inline-block;
+}
+.monitor {
+  position: absolute;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  overflow: hidden;
+  padding: 3px;
+  white-space: pre;
+}
+.show-monitor-box .monitor {
+  border-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.3);
+}
+.monitor-label {
+  margin: 0 5px;
+  font-weight: bold;
+}
+.monitor-value {
+  display: inline-block;
+  vertical-align: top;
+  min-width: 34px;
+  text-align: center;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+  transform: translateZ(0);
+}
+.default .monitor-value,
+.slider .monitor-value {
+  margin: 0 5px;
+  padding: 1px 3px;
+}
+.show-monitor-box .default .monitor-value,
+.show-monitor-box .slider .monitor-value {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.large {
+  padding: 0.1rem 0.25rem;
+  min-width: 3rem;
+}
+.show-monitor-box .large {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+.large .monitor-label {
+  display: none;
+}
+.large .monitor-value {
+  font-size: 1rem;
+  width: 100%;
+}
+.list {
+  padding: 0;
+  overflow: auto;
+  overflow-x: hidden;
+}
+.list .monitor-label {
+  text-align: center;
+  padding: 3px;
+  width: 100%;
+  display: block;
+  margin: 0;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+}
+.list .monitor-value {
+  display: block;
+}
+.row {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  height: 24px;
+  box-sizing: border-box;
+  transform: translateZ(0);
+}
+.index {
+  font-weight: bold;
+  margin: 0 3px;
+  flex: none;
+}
+.row-value {
+  flex: auto;
+  margin: 0 3px;
+  text-align: left;
+  border-radius: 0.25rem;
+  border: 1px solid transparent;
+  height: 22px;
+  padding: 3px 5px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.show-monitor-box .row-value {
+  border-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.slider input {
+  display: block;
+  width: 100%;
+  transform: translateZ(0);
+}
+#asking-box {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background-color: rgba(33, 33, 33, 0.7);
+}
+.asking #asking-box {
+  display: block;
+}
+#question {
+  display: block;
+  margin: 0 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: white;
+}
+#answer {
+  border: none;
+  background: none;
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  color: white;
+  padding: 10px;
+  box-sizing: border-box;
+}
+#answer:focus {
+  outline: none;
+}
+#errors {
+  -webkit-appearance: none;
+  border: none;
+  background: rgba(255, 0, 0, 0.7);
+  color: white;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: none;
+}
+
+</style> <style>
+#wrapper { width: 100vw; height: 75vw; }
+@media (min-aspect-ratio: 480/360) {
+#wrapper { height: 100vh; width: 133.33333333333331vh; }
+}
+#loading-progress {
+border: 1px solid #23a981;
+}
+#loading-progress::before {
+color: #23a981;
+}
+#loading-progress::after {
+background-color: #23a981;
+}
+.monitor {
+color: #ffffff;
+}
+</style>
+  </head>
+  <body class="loading show-loading-progress show-fullscreen-btn show-monitor-box">
+    <div id="wrapper">
+      <canvas id="stage"></canvas>
+      <div id="monitors"></div>
+      <div id="asking-box">
+        <label id="question" for="answer">Question</label>
+        <input type="text" id="answer" />
+      </div>
+    </div>
+    <div id="loading-progress" data-progress="0%"></div>
+    <img src="./loading.png" id="loading-image"> 
+    <div class="buttons">
+      <!--
+        Only support sprite files (no images) for now. See
+        https://github.com/SheepTester/htmlifier/issues/67#issuecomment-894746718
+      -->
+      <input
+        type="file"
+        id="add-sprite-file"
+        accept=".sprite2, .sprite3"
+        aria-label="Select a Scratch sprite to add"
+        multiple
+      />
+      <label
+        class="button"
+        id="add-sprite-btn"
+        for="add-sprite-file"
+        title="Add Scratch sprite to project"
+      ></label>
+      <button id="download-btn" aria-label="Download Scratch project"></button>
+      <button id="start-btn" aria-label="Start"></button>
+      <button id="stop-btn" aria-label="Stop" disabled></button>
+      <button id="fullscreen-btn" aria-label="Enter/exit fullscreen"></button>
+    </div>
+    <textarea id="errors" readonly></textarea>
+    <script src="./vm.js"></script> <script>
+const noop = () => null
+
+window.Scratch = {
+  get vm () {
+    return window.vm
+  },
+  get renderer () {
+    return window.vm.runtime.renderer
+  },
+  get audioEngine () {
+    return window.vm.runtime.audioEngine
+  },
+  get bitmapAdapter () {
+    return window.vm.runtime.v2BitmapAdapter
+  },
+  get videoProvider () {
+    return window.vm.runtime.ioDevices.video.provider
+  }
+}
+
+const CLOUD_PREFIX = '\u2601 '
+window.setCloud = (name, value) => {
+  vm.postIOData('cloud', {
+    varUpdate: {
+      name: CLOUD_PREFIX + name,
+      value
+    }
+  })
+}
+function postError (err) {
+  setCloud('eval error', err.toString())
+}
+
+class CloudProvider {
+  constructor (options) {
+    this._serverUrl = options.cloud.serverUrl
+    this._specialBehaviours = options.cloud.specialBehaviours
+    this._options = options
+
+    this._ws = null
+
+    this.createVariable = noop
+    this.renameVariable = noop
+    this.deleteVariable = noop
+
+    this._handleMessage = event => {
+      event.data.split('\n').forEach(message => {
+        if (message) {
+          const { name, value } = JSON.parse(message)
+          vm.postIOData('cloud', {
+            varUpdate: { name, value }
+          })
+        }
+      })
+    }
+    this._handleOpen = () => {
+      this._sendData({ method: 'handshake' })
+    }
+    this._handleClose = () => {
+      setTimeout(() => this._openConnection(), 500)
+    }
+
+    this.handleUrlChange = () => {
+      setCloud('url', window.location.href)
+    }
+    if (this._specialBehaviours) {
+      window.addEventListener('hashchange', this.handleUrlChange)
+      window.addEventListener('popstate', this.handleUrlChange)
+      // Paste output
+      window.addEventListener('paste', event => {
+        setCloud(
+          'pasted',
+          (event.clipboardData || window.clipboardData).getData('text')
+        )
+      })
+    }
+
+    if (this._serverUrl) {
+      this._openConnection()
+    }
+  }
+
+  _openConnection () {
+    try {
+      this._ws = new WebSocket(this._serverUrl)
+    } catch (error) {
+      console.warn(error)
+      return
+    }
+    this._ws.onmessage = this._handleMessage
+    this._ws.onopen = this._handleOpen
+    this._ws.onclose = this._handleClose
+  }
+
+  _sendData (data) {
+    data.user = this._options.username
+    data.project_id = this._options.cloud.projectId
+    this._ws.send(JSON.stringify(data) + '\n')
+  }
+
+  updateVariable (name, value) {
+    if (this._specialBehaviours) {
+      let matched = true
+      if (name === CLOUD_PREFIX + 'eval') {
+        try {
+          Promise.resolve(eval(value))
+            .then(output => {
+              setCloud('eval output', output)
+            })
+            .catch(postError)
+        } catch (error) {
+          postError(error)
+        }
+      } else if (name === CLOUD_PREFIX + 'open link') {
+        try {
+          window.open(value, '_blank')
+        } catch (error) {
+          postError(error)
+        }
+      } else if (name === CLOUD_PREFIX + 'redirect') {
+        window.location = value
+      } else if (name === CLOUD_PREFIX + 'set clipboard') {
+        try {
+          navigator.clipboard.writeText(value).catch(postError)
+        } catch (error) {
+          postError(error)
+        }
+      } else if (name === CLOUD_PREFIX + 'set server ip') {
+        this._cloudHost = value
+        if (this._ws) {
+          this._ws.onclose = noop
+          this._ws.close()
+        }
+        this._openConnection()
+      } else if (name === CLOUD_PREFIX + 'username') {
+        this._options.username = value
+        vm.postIOData('userData', { username: value })
+      } else {
+        matched = false
+      }
+      if (matched) {
+        return
+      }
+    }
+    if (
+      !this._serverUrl ||
+      (this._specialBehaviours &&
+        name.startsWith(CLOUD_PREFIX + 'local storage'))
+    ) {
+      try {
+        localStorage.setItem('[s3] ' + name, value)
+      } catch (error) {
+        postError(error)
+      }
+    } else {
+      this._sendData({ method: 'set', name, value })
+    }
+  }
+
+  requestCloseConnection () {
+    if (
+      this._ws &&
+      this._ws.readyState !== WebSocket.CLOSING &&
+      this._ws.readyState !== WebSocket.CLOSED
+    ) {
+      this._ws.onclose = noop
+      this._ws.close()
+    }
+  }
+}
+
+// Based on
+// https://github.com/LLK/scratch-gui/blob/7b658c60c7c04055e575601a861195fe6c9933f3/src/lib/video/camera.js
+// https://github.com/LLK/scratch-gui/blob/7b658c60c7c04055e575601a861195fe6c9933f3/src/lib/video/video-provider.js
+class VideoProvider {
+  constructor (width, height) {
+    this._dimensions = [width, height]
+    this.mirror = true
+    this._frameCacheTimeout = 16
+    this._video = null
+    this._track = null
+    this._workspace = []
+  }
+
+  get video () {
+    return this._video
+  }
+
+  enableVideo () {
+    this.enabled = true
+    return this._setupVideo()
+  }
+
+  disableVideo () {
+    this.enabled = false
+    if (this._singleSetup) {
+      this._singleSetup
+        .then(this._teardown.bind(this))
+        .catch(err => this.onError(err))
+    }
+  }
+
+  _teardown () {
+    if (this.enabled === false) {
+      requestStack.pop()
+      const disableTrack = requestStack.length === 0
+      this._singleSetup = null
+      this._video = null
+      if (this._track && disableTrack) {
+        this._track.stop()
+      }
+      this._track = null
+    }
+  }
+
+  getFrame ({
+    dimensions = this._dimensions,
+    mirror = this.mirror,
+    format = 'image-data',
+    cacheTimeout = this._frameCacheTimeout
+  }) {
+    if (!this.videoReady) {
+      return null
+    }
+    const [width, height] = dimensions
+    const workspace = this._getWorkspace({
+      dimensions,
+      mirror: Boolean(mirror)
+    })
+    const { videoWidth, videoHeight } = this._video
+    const { canvas, context, lastUpdate, cacheData } = workspace
+    const now = Date.now()
+
+    if (lastUpdate + cacheTimeout < now) {
+      if (mirror) {
+        context.scale(-1, 1)
+        context.translate(width * -1, 0)
+      }
+
+      context.drawImage(
+        this._video,
+        0,
+        0,
+        videoWidth,
+        videoHeight,
+        0,
+        0,
+        width,
+        height
+      )
+
+      context.setTransform(1, 0, 0, 1, 0, 0)
+      workspace.lastUpdate = now
+    }
+
+    if (!cacheData[format]) {
+      cacheData[format] = { lastUpdate: 0 }
+    }
+    const formatCache = cacheData[format]
+
+    if (formatCache.lastUpdate + cacheTimeout < now) {
+      if (format === 'image-data') {
+        formatCache.lastData = context.getImageData(0, 0, width, height)
+      } else if (format === 'canvas') {
+        formatCache.lastUpdate = Infinity
+        formatCache.lastData = canvas
+      } else {
+        console.error(`video io error - unimplemented format ${format}`)
+        formatCache.lastUpdate = Infinity
+        formatCache.lastData = null
+      }
+
+      formatCache.lastUpdate = Math.max(
+        workspace.lastUpdate,
+        formatCache.lastUpdate
+      )
+    }
+
+    return formatCache.lastData
+  }
+
+  onError (error) {
+    console.error('Unhandled video io device error', error)
+  }
+
+  _setupVideo () {
+    if (this._singleSetup) {
+      return this._singleSetup
+    }
+
+    if (requestStack.length === 0) {
+      this._singleSetup = navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          width: { min: width, ideal: (480 * width) / height },
+          height: { min: height, ideal: 480 }
+        }
+      })
+      requestStack.push(streamPromise)
+    } else if (requestStack.length > 0) {
+      this._singleSetup = requestStack[0]
+      requestStack.push(true)
+    }
+    this._singleSetup
+      .then(stream => {
+        this._video = document.createElement('video')
+
+        try {
+          this._video.srcObject = stream
+        } catch (_error) {
+          this._video.src = window.URL.createObjectURL(stream)
+        }
+        this._video.play()
+        this._track = stream.getTracks()[0]
+        return this
+      })
+      .catch(error => {
+        this._singleSetup = null
+        this.onError(error)
+      })
+
+    return this._singleSetup
+  }
+
+  get videoReady () {
+    if (!this.enabled || !this._video || !this._track) {
+      return false
+    }
+    const { videoWidth, videoHeight } = this._video
+    return (
+      typeof videoWidth === 'number' &&
+      typeof videoHeight === 'number' &&
+      videoWidth > 0 &&
+      videoHeight > 0
+    )
+  }
+
+  _getWorkspace ({ dimensions, mirror }) {
+    let workspace = this._workspace.find(
+      space =>
+        space.dimensions.join('-') === dimensions.join('-') &&
+        space.mirror === mirror
+    )
+    if (!workspace) {
+      workspace = {
+        dimensions,
+        mirror,
+        canvas: document.createElement('canvas'),
+        lastUpdate: 0,
+        cacheData: {}
+      }
+      workspace.canvas.width = dimensions[0]
+      workspace.canvas.height = dimensions[1]
+      workspace.context = workspace.canvas.getContext('2d')
+      this._workspace.push(workspace)
+    }
+    return workspace
+  }
+}
+
+const fullscreenBtn = document.getElementById('fullscreen-btn')
+const exitFullscreen =
+  document.exitFullscreen ||
+  document.msExitFullscreen ||
+  document.mozCancelFullScreen ||
+  document.webkitExitFullscreen
+const requestFullscreen =
+  document.body.requestFullscreen ||
+  document.body.msRequestFullscreen ||
+  document.body.mozRequestFullScreen ||
+  document.body.webkitRequestFullscreen
+function isFullscreen () {
+  return (
+    document.fullscreenElement ||
+    document.mozFullScreenElement ||
+    document.webkitFullscreenElement ||
+    document.msFullscreenElement
+  )
+}
+function toggleFullscreen () {
+  if (isFullscreen()) {
+    exitFullscreen.call(document)
+  } else {
+    requestFullscreen.call(document.body)
+  }
+}
+fullscreenBtn.addEventListener('click', () => {
+  fullscreenBtn.blur()
+  toggleFullscreen()
+})
+function handleFullscreenChange () {
+  if (isFullscreen()) {
+    document.body.classList.add('fullscreen')
+  } else {
+    document.body.classList.remove('fullscreen')
+  }
+}
+document.addEventListener('fullscreenchange', handleFullscreenChange)
+document.addEventListener('mozfullscreenchange', handleFullscreenChange)
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+document.addEventListener('msfullscreenchange', handleFullscreenChange)
+
+window.init = async ({ width, height, ...options }) => {
+  window.vm = new window.NotVirtualMachine(width, height)
+  vm.setCompatibilityMode(options.fps)
+  vm.setTurboMode(options.turbo)
+  vm.requireLimits(options.limits, { fencing: options.fencing })
+
+  const storage = new ScratchStorage()
+  const AssetType = storage.AssetType
+  if (options.assets.project) {
+    storage.addWebStore([AssetType.Project], () => options.assets.project)
+    storage.addWebStore(
+      [AssetType.ImageVector, AssetType.ImageBitmap, AssetType.Sound],
+      ({ assetId, dataFormat }) => options.assets[`${assetId}.${dataFormat}`]
+    )
+  }
+  const progress = document.getElementById('loading-progress')
+  if (options.loadingProgress) {
+    const _load = storage.webHelper.load
+    let total = 0,
+      complete = 0
+    storage.webHelper.load = function (...args) {
+      const result = _load.call(this, ...args)
+      total += 1
+      const percentage = (complete / total) * 100
+      progress.dataset.progress = percentage.toFixed(2) + '%'
+      progress.style.setProperty('--progress', percentage + '%')
+      result.then(() => {
+        complete += 1
+        const percentage = (complete / total) * 100
+        progress.dataset.progress = percentage.toFixed(2) + '%'
+        progress.style.setProperty('--progress', percentage + '%')
+      })
+      return result
+    }
+  }
+  vm.attachStorage(storage)
+
+  function resize () {
+    const rect = canvas.getBoundingClientRect()
+    renderer.resize(rect.width, rect.height)
+    if (options.stretchStage) {
+      monitorWrapper.style.transform = `scaleX(${rect.width /
+        width}) scaleY(${rect.height / height})`
+    } else {
+      monitorWrapper.style.transform = `scale(${rect.height / height})`
+    }
+  }
+  const monitorWrapper = document.getElementById('monitors')
+  const canvas = document.getElementById('stage')
+  const renderer = new window.ScratchRender(
+    canvas,
+    -width / 2,
+    width / 2,
+    -height / 2,
+    height / 2
+  )
+  resize()
+  vm.attachRenderer(renderer)
+
+  vm.attachAudioEngine(new window.AudioEngine())
+  vm.attachV2BitmapAdapter(
+    new ScratchSVGRenderer.BitmapAdapter(null, null, width, height)
+  )
+  vm.setVideoProvider(new VideoProvider(width, height))
+  vm.start()
+
+  if (options.extensionCount > 0) {
+    const OldWorker = window.Worker
+    window.Worker = class extends OldWorker {
+      // deno-lint-ignore constructor-super
+      constructor (...args) {
+        if (args[0].endsWith('extension-worker.js')) {
+          if (options.extensionWorker.url) {
+            super(options.extensionWorker.url, ...args.slice(1))
+          } else {
+            super(
+              URL.createObjectURL(
+                new Blob([options.extensionWorker.script], {
+                  type: 'text/javascript'
+                })
+              ),
+              ...args.slice(1)
+            )
+          }
+        } else {
+          super(...args)
+        }
+      }
+    }
+  }
+
+  /* https://github.com/LLK/scratch-gui/blob/develop/src/containers/stage.jsx#L176-L300 */
+  const getEventXY = e => {
+    if (e.touches && e.touches[0]) {
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    } else if (e.changedTouches && e.changedTouches[0]) {
+      return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY }
+    }
+    return { x: e.clientX, y: e.clientY }
+  }
+  let mouseDown = false
+  let mouseDownPosition = null
+  let mouseDownTimeoutId = null
+  let isDragging = false
+  let dragId = null
+  let dragOffset = null
+  function cancelMouseDownTimeout () {
+    if (mouseDownTimeoutId !== null) {
+      clearTimeout(mouseDownTimeoutId)
+    }
+    mouseDownTimeoutId = null
+  }
+  // https://github.com/LLK/scratch-gui/blob/develop/src/containers/stage.jsx#L337-L366
+  function handleStartDrag () {
+    if (dragId || !mouseDownPosition) return
+    const drawableId = renderer.pick(mouseDownPosition.x, mouseDownPosition.y)
+    if (drawableId === null) return
+    const targetId = vm.getTargetIdForDrawableId(drawableId)
+    if (targetId === null) return
+    const target = vm.runtime.getTargetById(targetId)
+    if (!target || !target.draggable) return
+    target.goToFront()
+    const drawableData = renderer.extractDrawable(
+      drawableId,
+      mouseDownPosition.x,
+      mouseDownPosition.y
+    )
+    vm.startDrag(targetId)
+    isDragging = true
+    dragId = targetId
+    dragOffset = drawableData.scratchOffset
+  }
+  const accumulative = { x: 0, y: 0 }
+  function postIfPointerLocked (e, isDown) {
+    if (
+      document.pointerLockElement === canvas ||
+      document.mozPointerLockElement === canvas
+    ) {
+      accumulative.x += e.movementX
+      accumulative.y += e.movementY
+      vm.postIOData('mouse', {
+        isDown,
+        x: accumulative.x + width / 2,
+        y: accumulative.y + height / 2,
+        canvasWidth: width,
+        canvasHeight: height
+      })
+      return true
+    } else {
+      return false
+    }
+  }
+  function postMouse (event, isDown) {
+    const { x, y } = getEventXY(event)
+    const rect = canvas.getBoundingClientRect()
+    const mousePosition = { x: x - rect.left, y: y - rect.top }
+    vm.postIOData('mouse', {
+      isDown,
+      ...mousePosition,
+      canvasWidth: rect.width,
+      canvasHeight: rect.height
+    })
+    return { mousePosition, rect }
+  }
+  function handleMouseMove (event) {
+    if (postIfPointerLocked(event)) return
+    const { mousePosition, rect } = postMouse(event)
+    if (mouseDown && !isDragging) {
+      const distanceFromMouseDown = Math.hypot(
+        mousePosition.x - mouseDownPosition.x,
+        mousePosition.y - mouseDownPosition.y
+      )
+      if (distanceFromMouseDown > 3) {
+        cancelMouseDownTimeout()
+        handleStartDrag()
+      }
+    }
+    if (mouseDown && isDragging) {
+      const nativeSize = renderer.getNativeSize()
+      vm.postSpriteInfo({
+        x:
+          (nativeSize[0] / rect.width) * (mousePosition.x - rect.width / 2) +
+          dragOffset[0],
+        y: -(
+          (nativeSize[1] / rect.height) * (mousePosition.y - rect.height / 2) +
+          dragOffset[1]
+        ),
+        force: true
+      })
+    }
+  }
+  function handleMouseDown (event) {
+    mouseDown = true
+    vm.postIOData('keyboard', {
+      key: 'Mouse' + event.which,
+      isDown: true
+    })
+    if (postIfPointerLocked(event, true)) return
+    mouseDownPosition = postMouse(event, true).mousePosition
+    mouseDownTimeoutId = setTimeout(handleStartDrag, 400)
+    event.preventDefault()
+    if (!document.body.classList.contains('asking')) {
+      window.focus()
+    }
+  }
+  function handleMouseUp (event) {
+    cancelMouseDownTimeout()
+    mouseDown = false
+    mouseDownPosition = null
+    if (isDragging) {
+      vm.stopDrag(dragId)
+      isDragging = false
+      dragOffset = null
+      dragId = null
+    }
+    vm.postIOData('keyboard', {
+      key: 'Mouse' + event.which,
+      isDown: false
+    })
+    if (postIfPointerLocked(event, false)) return
+    postMouse(event, false)
+  }
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+  document.addEventListener('touchmove', handleMouseMove)
+  document.addEventListener('touchend', handleMouseUp, { passive: false })
+  canvas.addEventListener('wheel', event => {
+    vm.postIOData('mouseWheel', event)
+    event.preventDefault()
+  })
+  window.addEventListener('resize', resize)
+  canvas.addEventListener('contextmenu', event => {
+    event.preventDefault()
+  })
+  if (options.pointerLock) {
+    canvas.requestPointerLock =
+      canvas.requestPointerLock || canvas.mozRequestPointerLock
+    canvas.addEventListener('click', () => {
+      canvas.requestPointerLock()
+    })
+  }
+
+  /**
+   * Maps e.key to e.code. For example, Shift -> ShiftRight. This is because the
+   * keyup event doesn't fire when you let go of one shift if the other shift
+   * key is still held down.
+   */
+  const keyToCode = new Map()
+  function postKey (event, isDown) {
+    const key = !event.key || event.key === 'Dead' ? event.keyCode : event.key
+    vm.postIOData('keyboard', {
+      key: key,
+      isDown
+    })
+    vm.postIOData('keyboard', {
+      key: 'code_' + event.code,
+      isDown
+    })
+  }
+  document.addEventListener('keydown', event => {
+    if (event.target !== document && event.target !== document.body) return
+    const prevCode = keyToCode.get(event.key)
+    if (prevCode) {
+      if (prevCode !== event.code) {
+        vm.postIOData('keyboard', {
+          key: 'code_' + prevCode,
+          isDown: false
+        })
+      }
+    }
+    postKey(event, true)
+    keyToCode.set(event.key, event.code)
+    if (event.keyCode === 32 || (event.keyCode >= 37 && event.keyCode <= 40)) {
+      event.preventDefault()
+    }
+    if (
+      event.key === 'f' &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.shiftKey &&
+      !event.altKey
+    ) {
+      toggleFullscreen()
+      event.preventDefault()
+    }
+  })
+  document.addEventListener('keyup', e => {
+    postKey(e, false)
+    keyToCode.delete(e.key)
+    if (e.target !== document && e.target !== document.body) {
+      e.preventDefault()
+    }
+  })
+  vm.postIOData('keyboard', {
+    key: 'HTMLifier',
+    isDown: true
+  })
+
+  const question = document.getElementById('question')
+  const askBox = document.getElementById('answer')
+  vm.runtime.addListener('QUESTION', questionData => {
+    // null means the question was interrupted by stop script block
+    if (questionData === null) {
+      document.body.classList.remove('asking')
+    } else {
+      document.body.classList.add('asking')
+      question.textContent = questionData
+      askBox.value = ''
+      askBox.focus()
+    }
+  })
+  askBox.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      // The asking class must be removed first because the VM may start the
+      // next question immediately inside the .emit call
+      document.body.classList.remove('asking')
+      vm.runtime.emit('ANSWER', askBox.value)
+    }
+  })
+
+  const getVariable = (targetId, variableId) => {
+    const target = targetId
+      ? vm.runtime.getTargetById(targetId)
+      : vm.runtime.getTargetForStage()
+    return target.variables[variableId]
+  }
+  const monitorStates = {}
+  vm.runtime.addListener('MONITORS_UPDATE', monitors => {
+    monitors.forEach((record, id) => {
+      const {
+        value,
+        visible,
+        mode,
+        x,
+        y,
+        width,
+        height,
+        params,
+        opcode,
+        spriteName,
+        sliderMin,
+        sliderMax,
+        isDiscrete,
+        targetId
+      } = record
+
+      if (!monitorStates[id]) {
+        const label = document.createElement('span')
+        label.className = 'monitor-label'
+        const name = params.VARIABLE || params.LIST || opcode
+        label.textContent = spriteName ? `${spriteName}: ${name}` : name
+
+        const value = document.createElement('span')
+        value.className = 'monitor-value'
+
+        const monitor = document.createElement('div')
+        monitor.className = 'monitor ' + mode
+        monitor.style.left = x + 'px'
+        monitor.style.top = y + 'px'
+        monitor.append(label, value)
+
+        monitorStates[id] = { monitor, valueElem: value, wasVisible: true }
+
+        if (mode === 'slider') {
+          const slider = document.createElement('input')
+          slider.type = 'range'
+          slider.min = sliderMin
+          slider.max = sliderMax
+          slider.step = isDiscrete ? 1 : 0.01
+          // Prevent tab focus, per #54, but it deviates from Scratch
+          slider.tabIndex = -1
+          slider.addEventListener('input', () => {
+            getVariable(targetId, id).value = slider.value
+          })
+          slider.addEventListener('change', () => {
+            getVariable(targetId, id).value = slider.value
+          })
+          monitorStates[id].slider = slider
+          monitor.append(slider)
+        } else if (mode === 'list') {
+          // If the list has never been resized, the width/height will be 0.
+          // Weird!
+          monitor.style.width = (width || 100) + 'px'
+          monitor.style.height = (height || 200) + 'px'
+
+          monitorStates[id].rowElems = []
+        }
+
+        monitorWrapper.append(monitor)
+      }
+
+      const {
+        monitor,
+        valueElem,
+        wasVisible,
+        lastValue = [],
+        slider,
+        rowElems
+      } = monitorStates[id]
+      if (visible) {
+        if (!wasVisible) {
+          monitor.style.display = null
+        }
+        const differed = Array.isArray(value)
+          ? JSON.stringify(lastValue) !== JSON.stringify(value)
+          : lastValue !== value
+        if (differed) {
+          if (Array.isArray(value)) {
+            if (lastValue.length !== rowElems.length) {
+              console.error(
+                "List monitor rowElems and lastValue lengths don't match."
+              )
+            }
+
+            value.forEach((val, i) => {
+              if (i >= lastValue.length) {
+                // Could also set width to (lastValue.length + '').length + 'ch'
+                const index = document.createElement('div')
+                index.className = 'index'
+                index.textContent = i + 1
+
+                const value = document.createElement('div')
+                value.className = 'row-value'
+
+                const row = document.createElement('div')
+                row.className = 'row'
+                row.append(index, value)
+
+                valueElem.append(row)
+                rowElems[i] = value
+              }
+
+              if (lastValue[i] !== val) {
+                rowElems[i].textContent = val
+              }
+            })
+
+            if (value.length < lastValue.length) {
+              for (const toRemove of rowElems.splice(
+                value.length,
+                lastValue.length - value.length
+              )) {
+                toRemove.parentNode.remove()
+              }
+            }
+          } else {
+            // The HTMLifier used to use Number(value.toFixed(6)) but I don't
+            // think Scratch does that for monitors
+            valueElem.textContent = value
+            if (slider) {
+              slider.value = value
+            }
+          }
+        }
+      } else if (wasVisible) {
+        monitor.style.display = 'none'
+      }
+      monitorStates[id].wasVisible = visible
+      // `value` is a live array
+      monitorStates[id].lastValue = Array.isArray(value) ? [...value] : value
+    })
+  })
+
+  vm.postIOData('userData', { username: options.username })
+
+  for (let i = 0; i < options.extensionCount; i++) {
+    await vm.extensionManager.loadExtensionURL(String(i))
+  }
+
+  await vm.loadProject(
+    options.assets.file
+      ? await fetch(options.assets.file).then(r => r.arrayBuffer())
+      : typeof options.assets.project === 'string'
+      ? await storage.load(storage.AssetType.Project).then(asset => asset.data)
+      : // project.json was included as parsed JSON
+        JSON.stringify(options.assets.project)
+  )
+
+  const cloudProvider = new CloudProvider(options)
+  vm.setCloudProvider(cloudProvider)
+  if (options.cloud.specialBehaviours || !options.cloud.serverUrl) {
+    const stageVariables = vm.runtime.getTargetForStage().variables
+    for (const { name, isCloud } of Object.values(stageVariables)) {
+      if (isCloud) {
+        if (
+          options.cloud.specialBehaviours &&
+          options.cloud.serverUrl &&
+          !name.startsWith(CLOUD_PREFIX + 'local storage')
+        ) {
+          continue
+        }
+        const value = localStorage.getItem('[s3] ' + name)
+        if (value !== null) {
+          vm.postIOData('cloud', { varUpdate: { name, value } })
+        }
+      }
+    }
+  }
+  if (options.cloud.specialBehaviours) {
+    cloudProvider.handleUrlChange()
+  }
+
+  progress.remove()
+  const loadingImage = document.getElementById('loading-image')
+  if (loadingImage) {
+    loadingImage.remove()
+  }
+  document.body.classList.remove('loading')
+
+  const greenFlag = document.getElementById('start-btn')
+  const stopSign = document.getElementById('stop-btn')
+  greenFlag.addEventListener('click', () => {
+    greenFlag.blur()
+    vm.greenFlag()
+  })
+  stopSign.addEventListener('click', () => {
+    stopSign.blur()
+    vm.stopAll()
+  })
+  vm.on('PROJECT_RUN_START', () => {
+    document.body.classList.add('running')
+    stopSign.disabled = false
+  })
+  vm.on('PROJECT_RUN_STOP', () => {
+    document.body.classList.remove('running')
+    stopSign.disabled = true
+  })
+  if (options.autoStart) {
+    vm.greenFlag()
+  }
+
+  document
+    .getElementById('download-btn')
+    .addEventListener('click', async () => {
+      download(await vm.saveProjectSb3(), document.title + '.sb3')
+    })
+  const addSpriteInput = document.getElementById('add-sprite-file')
+  addSpriteInput.addEventListener('change', async () => {
+    addSpriteInput.disabled = true
+    for (const file of addSpriteInput.files) {
+      // 1. Convert the File to an arrayBuffer. I care less about browser
+      // support, so I can use async/await + .arrayBuffer
+      // https://github.com/LLK/scratch-gui/blob/develop/src/lib/file-uploader.js#L25
+      const sprite = new Uint8Array(await file.arrayBuffer())
+
+      // 2. Convert a costume to a sprite (skipping for now)
+      // https://github.com/LLK/scratch-gui/blob/develop/src/lib/file-uploader.js#L208
+
+      // 3. Add to VM
+      await vm.addSprite(sprite)
+    }
+    addSpriteInput.disabled = false
+    addSpriteInput.value = null
+  })
+
+  canvas.addEventListener('mousedown', handleMouseDown)
+  canvas.addEventListener('touchstart', handleMouseDown, { passive: false })
+}
+
+const errorsTextarea = document.getElementById('errors')
+function handleHashChange () {
+  // #show-errors-<Han sheep>
+  if (window.location.hash === '#show-errors-%E7%BE%8A') {
+    if (!window.onNewError) {
+      window.onNewError = () => {
+        errorsTextarea.value = `${
+          window.errors.length
+        } error(s)\n${window.errors.join('\n')}`
+      }
+      window.onNewError()
+    }
+    errorsTextarea.style.display = 'block'
+  } else if (window.onNewError) {
+    window.onNewError = null
+    errorsTextarea.style.display = 'none'
+  }
+}
+window.addEventListener('hashchange', handleHashChange)
+handleHashChange()
+
+// Not used by the template, but might be convenient for un-HTMLifying if I
+// remember this function exists
+window.download = (blob, name = 'download') => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+</script> <script>
+const GENERATED = 1703188894042
+const initOptions = {
+	"width": 480,
+	"height": 360,
+	"stretchStage": false,
+	"fps": 30,
+	"turbo": false,
+	"limits": true,
+	"fencing": true,
+	"pointerLock": false,
+	"autoStart": true,
+	"username": "PVP",
+	"loadingProgress": true,
+	"cloud": {
+		"serverUrl": null,
+		"specialBehaviours": false,
+		"projectId": "276660763"
+	},
+	"extensionWorker": {
+		"url": "https://sheeptester.github.io/scratch-vm/16-9/extension-worker.js"
+	},
+	"extensionCount": 0,
+	"assets": {
+		"project": "./project.json",
+		"14e46ec3e2ba471c2adfe8f119052307.svg": "./14e46ec3e2ba471c2adfe8f119052307.svg",
+		"83a9787d4cb6f3b7632b4ddfebf74367.wav": "./83a9787d4cb6f3b7632b4ddfebf74367.wav",
+		"636d06df03e34c5abdeca9c0a1f9bf1f.svg": "./636d06df03e34c5abdeca9c0a1f9bf1f.svg",
+		"d146e6070347086a0debec62d3de4a60.wav": "./d146e6070347086a0debec62d3de4a60.wav",
+		"cfdc8de3c80d68fce736681868eb7266.wav": "./cfdc8de3c80d68fce736681868eb7266.wav",
+		"41261e26a853b846ea450897ac75c7ab.svg": "./41261e26a853b846ea450897ac75c7ab.svg",
+		"83c36d806dc92327b9e7049a565c6bff.wav": "./83c36d806dc92327b9e7049a565c6bff.wav",
+		"289c6ade877024361cf358c3f494cb0c.svg": "./289c6ade877024361cf358c3f494cb0c.svg",
+		"04bcdc1e4fd3cbcfdcd62ec9436b3e65.svg": "./04bcdc1e4fd3cbcfdcd62ec9436b3e65.svg",
+		"e8de451b62f0a7a01e4ce4a6137f5425.svg": "./e8de451b62f0a7a01e4ce4a6137f5425.svg",
+		"0195c36fa0216ed86c10c1fc8e921f2c.svg": "./0195c36fa0216ed86c10c1fc8e921f2c.svg",
+		"600bd3c8f89636d31a0b5744d79d4c59.svg": "./600bd3c8f89636d31a0b5744d79d4c59.svg",
+		"6d6b4574f9acdd0171de5a9d7795956c.svg": "./6d6b4574f9acdd0171de5a9d7795956c.svg",
+		"3a6262f96c4ad0f7b61d578e9416a741.svg": "./3a6262f96c4ad0f7b61d578e9416a741.svg",
+		"276ce38bbf43510e04aa3f741e92ef79.svg": "./276ce38bbf43510e04aa3f741e92ef79.svg",
+		"47fa02b67118e471bedda7be79dc1c54.svg": "./47fa02b67118e471bedda7be79dc1c54.svg",
+		"c4c53a7f95b5abd4b5a58e1345c89b12.svg": "./c4c53a7f95b5abd4b5a58e1345c89b12.svg",
+		"736ac82c45ce28b19e3fece8b896c4cf.svg": "./736ac82c45ce28b19e3fece8b896c4cf.svg",
+		"8c38f7d57e59e4f41becc0b23bc51bd5.svg": "./8c38f7d57e59e4f41becc0b23bc51bd5.svg",
+		"e85a5ed297ff312ebfb2e7e735c9600b.svg": "./e85a5ed297ff312ebfb2e7e735c9600b.svg",
+		"d0093afb3c697412026542baa14fb62d.svg": "./d0093afb3c697412026542baa14fb62d.svg",
+		"115e52591b0b7d10c2440f1e6489b194.svg": "./115e52591b0b7d10c2440f1e6489b194.svg",
+		"37927a16720fd5ceeb28e3ddc42bbde2.svg": "./37927a16720fd5ceeb28e3ddc42bbde2.svg",
+		"e38894b17ce81ba204f067d3e2bfe8fb.svg": "./e38894b17ce81ba204f067d3e2bfe8fb.svg",
+		"ea6406d6a997d2e270c8d9a961678813.svg": "./ea6406d6a997d2e270c8d9a961678813.svg",
+		"fdbc2154aab9f8a910854d0ab3afda69.svg": "./fdbc2154aab9f8a910854d0ab3afda69.svg",
+		"35eabee535e8b66829ce66f085e2e9bf.svg": "./35eabee535e8b66829ce66f085e2e9bf.svg",
+		"e96a3cf557a747005572648e75e390af.svg": "./e96a3cf557a747005572648e75e390af.svg",
+		"93e12b97bf686fbc75dd01e610c34de4.svg": "./93e12b97bf686fbc75dd01e610c34de4.svg",
+		"ef20b13141a6bfa71645255622cb7359.svg": "./ef20b13141a6bfa71645255622cb7359.svg",
+		"c21a6c12c4bf90878579c5c937a5c6f3.svg": "./c21a6c12c4bf90878579c5c937a5c6f3.svg",
+		"e07c28634006f915013569731c749ef9.svg": "./e07c28634006f915013569731c749ef9.svg",
+		"c664b60fec3aea94f9d43bd95803ca3b.svg": "./c664b60fec3aea94f9d43bd95803ca3b.svg",
+		"8128751c15b594a20970dcece99064c8.svg": "./8128751c15b594a20970dcece99064c8.svg",
+		"812793bf8cb45c44b94e526dae96f626.svg": "./812793bf8cb45c44b94e526dae96f626.svg",
+		"26f437292b67929944f458de33dc8682.svg": "./26f437292b67929944f458de33dc8682.svg",
+		"5f69759d3f3d3c8f5af888a70d33ca35.svg": "./5f69759d3f3d3c8f5af888a70d33ca35.svg",
+		"2720dfd726fd6239853f1450ca8f54d9.svg": "./2720dfd726fd6239853f1450ca8f54d9.svg",
+		"7fb27cce5baae9948ea985ac122bf3ed.svg": "./7fb27cce5baae9948ea985ac122bf3ed.svg",
+		"31e357f699a9812982d83ffb2e910bc2.svg": "./31e357f699a9812982d83ffb2e910bc2.svg",
+		"da82c3d01a0390328abbdad0aa02e102.svg": "./da82c3d01a0390328abbdad0aa02e102.svg",
+		"efc5ff5038e0fb05a4fb02cd1b78a74b.svg": "./efc5ff5038e0fb05a4fb02cd1b78a74b.svg",
+		"222a2cab68d65849e457b5aa1f1d0c15.svg": "./222a2cab68d65849e457b5aa1f1d0c15.svg",
+		"3bbd0acf2bfdde76d20d8b8cb8558c66.svg": "./3bbd0acf2bfdde76d20d8b8cb8558c66.svg",
+		"e556b88fd473e6cfbc10d80c8c3a2979.svg": "./e556b88fd473e6cfbc10d80c8c3a2979.svg",
+		"30ef046c6c6c9ece75ab44cba015b46d.svg": "./30ef046c6c6c9ece75ab44cba015b46d.svg",
+		"39b2ed3f15033b5b27a859f813bac500.svg": "./39b2ed3f15033b5b27a859f813bac500.svg",
+		"8db98c1b8633b4fa73eba8dd2290c5b6.svg": "./8db98c1b8633b4fa73eba8dd2290c5b6.svg",
+		"002127cc0fb08010f3744c613b586d7d.svg": "./002127cc0fb08010f3744c613b586d7d.svg",
+		"3d9c44e975dddf84d9a46e194eae63ea.svg": "./3d9c44e975dddf84d9a46e194eae63ea.svg",
+		"7d497a9f710d3967dcf52b9cf6027d93.svg": "./7d497a9f710d3967dcf52b9cf6027d93.svg",
+		"5ce324b91e2e630b2f83d2bef96ab061.svg": "./5ce324b91e2e630b2f83d2bef96ab061.svg",
+		"ce8aa88ebda6a0510a0e24443c4421d8.svg": "./ce8aa88ebda6a0510a0e24443c4421d8.svg",
+		"21cda9c5c6159167cd940d6c2253874e.svg": "./21cda9c5c6159167cd940d6c2253874e.svg",
+		"6131773754433b240b34dd0665ec07c1.svg": "./6131773754433b240b34dd0665ec07c1.svg",
+		"a916f01aa94a88737e88b1220f32d87b.svg": "./a916f01aa94a88737e88b1220f32d87b.svg",
+		"fec1b665febdcbd5888fff1f78e3070c.svg": "./fec1b665febdcbd5888fff1f78e3070c.svg",
+		"cc2878c9de19a843eebdcf811ceb3500.svg": "./cc2878c9de19a843eebdcf811ceb3500.svg",
+		"2d92c025119f0d84520ce1a105a7658f.svg": "./2d92c025119f0d84520ce1a105a7658f.svg",
+		"4e5120fa2eb8541b192af47f17e95c87.svg": "./4e5120fa2eb8541b192af47f17e95c87.svg",
+		"9f1abac3a76cd3ab5b57e50d0ee90420.wav": "./9f1abac3a76cd3ab5b57e50d0ee90420.wav",
+		"4c5b729ac77ef5f398c9d15d7ded68cc.wav": "./4c5b729ac77ef5f398c9d15d7ded68cc.wav",
+		"55159b0dad16d561049439a870d0fa54.wav": "./55159b0dad16d561049439a870d0fa54.wav",
+		"d248fd9f3b0aa94c46d5cd739dbe6fdf.svg": "./d248fd9f3b0aa94c46d5cd739dbe6fdf.svg",
+		"5537cb07193934a7bdcf80d531426b1f.svg": "./5537cb07193934a7bdcf80d531426b1f.svg",
+		"9bd69f05410a7dd82e2273f7b101561a.svg": "./9bd69f05410a7dd82e2273f7b101561a.svg",
+		"dba49ffc50f9a94d597f917677f2477c.svg": "./dba49ffc50f9a94d597f917677f2477c.svg",
+		"6f38039b791fa3610c75ea0ed276db9e.svg": "./6f38039b791fa3610c75ea0ed276db9e.svg",
+		"72295869b0d7960293d1341d1296978d.wav": "./72295869b0d7960293d1341d1296978d.wav",
+		"705062c89ac5a5270b71fc60aa24f985.svg": "./705062c89ac5a5270b71fc60aa24f985.svg",
+		"446872b73cdeda2f87f7cdf72d21f892.svg": "./446872b73cdeda2f87f7cdf72d21f892.svg",
+		"26e3010806ef70bb3e1cd122ba3075e0.mp3": "./26e3010806ef70bb3e1cd122ba3075e0.mp3",
+		"405e1033133fc1d97c23b5e66194aa1b.svg": "./405e1033133fc1d97c23b5e66194aa1b.svg",
+		"4737c0df68ecc8616ef38b1e936d0431.svg": "./4737c0df68ecc8616ef38b1e936d0431.svg",
+		"6232baa08d21f527d6673bd85bcd023d.png": "./6232baa08d21f527d6673bd85bcd023d.png",
+		"cf5df62b5893967c744af57e5e780b70.svg": "./cf5df62b5893967c744af57e5e780b70.svg",
+		"07e1d784bd349139dd0abe8c6b066325.svg": "./07e1d784bd349139dd0abe8c6b066325.svg",
+		"f72e25a1cdf79508c5f3d05e788c29ce.svg": "./f72e25a1cdf79508c5f3d05e788c29ce.svg",
+		"9af5827e191d022a33a4bb379a212b38.svg": "./9af5827e191d022a33a4bb379a212b38.svg",
+		"41db910ce5bfbea3529941cd52eaff1a.svg": "./41db910ce5bfbea3529941cd52eaff1a.svg",
+		"25042aeb89f171121f39ef56eaaba572.svg": "./25042aeb89f171121f39ef56eaaba572.svg",
+		"279daf26b7b43e0d5df0db327dc5ccce.png": "./279daf26b7b43e0d5df0db327dc5ccce.png"
+	}
+}
+init(initOptions)
+</script>
+  </body>
+</html>
